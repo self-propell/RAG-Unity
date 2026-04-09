@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# 配置（含 API Key，不提交）
+.env
+
+# 运行时生成的数据（体积大或含本地路径）
+rag_databases/
+conversations/
+projects.json
+
+# Embedding 模型（体积过大，单独下载）
+models/
+
+# 旧索引目录名
+unity_index/
+
+# Claude Code 本地配置
+.claude/
+
+# 残留数据库目录
+nonexist/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
