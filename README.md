@@ -4,24 +4,59 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![LangGraph](https://img.shields.io/badge/LangGraph-Powered-orange)](https://github.com/langchain-ai/langgraph)
 
-对 Unity 工程建立多域语义索引，通过对话式 Agent 辅助代码检索、问答与文件修改。完全本地运行，不向外部服务上传代码。
+> 该项目含有大量关于vibe coding的测试，难免疏漏。请注意保护个人信息！（KEY/工程信息）
+
+对 Unity 工程建立多域语义索引，通过对话式 Agent 辅助代码检索、问答与文件修改。
+
+**🆕 v2.0 新特性：**
+- ✨ **流式输出**：实时显示 LLM 生成和工具执行进度
+- 🛡️ **人工审批**：危险操作前确认，支持 YOLO 模式
+- ⏮️ **状态回溯**：检查点系统，支持对话回滚
+- 🧠 **ReAct 模式**：显式推理 → 行动 → 观察循环
 
 ---
 
 ## 功能特性
 
+### 核心功能
 - **多域 RAG 索引**：`code / scene / prefab / asset / audio / image` 六域分别建立向量索引，检索时可按域过滤
 - **C# 语法感知分块**：tree-sitter 解析 AST，以类 / 方法为边界切块，保证代码片段语义完整
 - **Unity YAML 解析**：Scene、Prefab、Asset 按逻辑对象摘要切块，而非裸 YAML 文本
 - **双 LLM Provider**：支持 Claude（含 Prompt Caching）和 OpenAI / 兼容接口，运行时可切换
+- **完全离线 Embedding**：使用本地 sentence-transformers 模型，不依赖 embedding API，代码不出本地
+
+### LangGraph 增强功能 (v2.0)
+- **流式输出**：
+  - Token 级别实时显示
+  - 工具执行进度提示
+  - CLI 和 Dashboard 双端支持
+  
+- **人工审批系统**：
+  - 可配置审批规则（per-project）
+  - 三种模式：auto / batch / yolo
+  - 危险操作默认需要确认（run_command, rag_rebuild）
+  - 支持"批量审批"和"一次批准后自动执行"
+  
+- **状态回溯**：
+  - SQLite 检查点持久化
+  - `/rollback [steps]` 命令回滚对话
+  - `/history` 查看检查点历史
+  - 支持从任意断点恢复
+  
+- **ReAct 模式**：
+  - 显式推理过程
+  - 工具调用追踪
+  - 观察结果整合
+
+### 其他功能
 - **Tool Use Agent**：LLM 可自主调用 12 个沙盒工具（读写文件、搜索代码、执行命令、RAG 索引管理）
 - **多工程管理**：同时注册多个 Unity 工程，向量数据库按工程隔离
 - **交互式 CLI**：Rich 终端界面，内置检索、对话、文件操作等 30+ 指令
 - **Web Dashboard**：Flask 驱动的浏览器界面，支持聊天、检索面板、文件编辑、AI Draft
 - **对话持久化**：多对话框管理，按工程隔离存储，记录 token 消耗统计
 - **文件监听**：`watch` 模式监听工程文件变更，自动增量更新索引
-- **完全离线 Embedding**：使用本地 sentence-transformers 模型，不依赖 embedding API，代码不出本地
 
 ---
 
@@ -168,6 +203,15 @@ python main.py cli --search "关键词"      # 仅做向量检索，不调用 LL
 | `/topk <N>` | 设置检索数量 |
 | `/model` | 查看 / 切换模型 |
 | `/provider [claude\|openai]` | 切换 LLM Provider |
+
+**LangGraph 新增命令**
+
+| 指令 | 说明 |
+|------|------|
+| `/rollback [steps]` | 回滚对话 N 步（默认 1） |
+| `/history` | 查看检查点历史 |
+| `/approval` | 查看审批配置 |
+| `/yolo` | 关于 YOLO 模式的说明 |
 
 **工程管理**
 
@@ -403,10 +447,8 @@ RAG 检索（相关代码片段注入上下文）
 - **图片 / 音频**：目前以文件名、路径、引用关系为主要索引维度，不做真正的视觉 / 音频语义 embedding
 - **AI Draft**：单文件草案模式，不支持跨多文件的事务式修改
 - **Draft Queue / Tasks**：当前为内存状态，重启 Dashboard 后不保留
-- **无 API 重试**：网络抖动或限速时请求会直接失败，建议在稳定网络环境下使用
-- **无流式输出**：CLI 模式下需等待 LLM 完整生成后才显示结果
 
-### RAG 效果调优���议
+### RAG 效果调优建议
 
 如果检索效果不理想，可以从以下方向入手：
 
@@ -440,6 +482,117 @@ A: 索引数据库（`rag_databases/`）是本地二进制格式，理论上可�
 
 **Q: 如何新增 Skill？**
 A: 参考 Claude Code Skill 规范，将 Skill 定义文件放到对应目录，重启后即可在 CLI 用 `/skills` 查看。
+
+**Q: 如何配置审批规则？**
+A: 编辑 `projects.json` 中的 `approval_config` 字段：
+```json
+{
+  "project_id": "abc123",
+  "approval_config": {
+    "mode": "batch",
+    "tools": {
+      "run_command": true,
+      "rag_rebuild": true,
+      "write_file": false
+    }
+  }
+}
+```
+
+**Q: YOLO 模式是什么？**
+A: YOLO (You Only Live Once) 模式是一种审批模式，在第一次审批时选择 "yolo"，之后该会话中的所有工具调用都会自动批准，无需再次确认。适合信任 Agent 的场景。
+
+**Q: 如何回滚错误的操作？**
+A: 使用 `/rollback [steps]` 命令回滚对话。例如 `/rollback 2` 回滚 2 步。使用 `/history` 查看可用的检查点。
+
+**Q: 流式输出不工作？**
+A: 流式输出需要 LangGraph agent。确保使用的是 `UnityLangGraphAgent` 而非旧的 `UnityAgent`。
+
+---
+
+## 升级到 v2.0 (LangGraph)
+
+### 自动迁移
+
+运行迁移脚本：
+```bash
+python migrate_conversations.py --all
+```
+
+或交互式选择：
+```bash
+python migrate_conversations.py
+```
+
+### 手动迁移
+
+现有对话格式已兼容，无需手动迁移。LangGraph 会在首次使用时自动创建检查点。
+
+### 配置更新
+
+在 `projects.json` 中为每个项目添加审批配置（可选）：
+```json
+{
+  "projects": [
+    {
+      "project_id": "abc123",
+      "name": "MyGame",
+      "path": "/path/to/project",
+      "approval_config": {
+        "mode": "batch",
+        "tools": {
+          "run_command": true,
+          "rag_rebuild": true
+        }
+      }
+    }
+  ]
+}
+```
+
+---
+
+## 技术架构 (v2.0)
+
+### LangGraph 状态图
+
+```
+[START]
+   ↓
+[RAG Retrieval] ← 语义检索，注入上下文
+   ↓
+[LLM Call] ← 调用 Claude/OpenAI（支持流式）
+   ↓
+[Has Tool Calls?]
+   ↓           ↓
+[Yes]       [No] → [Format Output] → [END]
+   ↓
+[Approval Gate] ← 人工审批（可配置）
+   ↓
+[Tool Execution] ← 执行工具，记录结果
+   ↓
+[Should Continue?]
+   ↓           ↓
+[Yes]       [No]
+   ↓           ↓
+[LLM Call]  [Format Output] → [END]
+```
+
+### 检查点系统
+
+- **存储**: SQLite (per-project)
+- **位置**: `{project.db_path}/langgraph_checkpoints.db`
+- **内容**: 完整状态快照（messages, tool_results, metadata）
+- **清理**: 自动保留最近 50 个检查点
+
+### 审批系统
+
+- **配置级别**: Per-project
+- **模式**:
+  - `auto`: 无审批
+  - `batch`: 批量审批（默认）
+  - `yolo`: 一次批准后自动执行
+- **默认危险工具**: `run_command`, `rag_rebuild`
 
 ---
 

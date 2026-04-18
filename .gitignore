@@ -1,36 +1,211 @@
 # Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# Project specific - User data (IMPORTANT: contains local paths and personal info)
+projects.json
+conversations/
+rag_databases/
+*.log
+*.tmp
+.cache/
+
+# Test files
+test_*.py
+*_test.py
+pytest_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary scripts
+cleanup.py
+migrate_*.py
+
+# Documentation (keep only README.md)
+CLEANUP_GUIDE.md
+ERROR_HANDLING_SUMMARY.md
+FUNCTION_CALL_ERROR_HANDLING.md
+LANGGRAPH_MIGRATION.md
+PLANNING.md
+PLANNING_SUMMARY.md
+UI_ENHANCEMENTS.md
+
+# HTML fragments
+ui/*_ui.html
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Environment variables (IMPORTANT: never commit API keys!)
+.env
+.env.local
+.env.*.local
+
+# Embedding Models (large files, download separately)
+models/*/
+!models/.gitkeep
+!models/README.md
+
+# Claude Code settings (personal configuration)
+.claude/settings.local.json
+.claude/memory/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Compiled files
 *.pyc
 *.pyo
 *.pyd
-*.egg-info/
-dist/
+
+# Distribution / packaging
+.Python
 build/
-.venv/
-venv/
-env/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# 配置（含 API Key，不提交）
-.env
+# PyInstaller
+*.manifest
+*.spec
 
-# 运行时生成的数据（体积大或含本地路径）
-rag_databases/
-conversations/
-projects.json
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
 
-# Embedding 模型（体积过大，单独下载）
-models/
+# Translations
+*.mo
+*.pot
 
-# 旧索引目录名
-unity_index/
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
 
-# Claude Code 本地配置
-.claude/
+# Flask stuff:
+instance/
+.webassets-cache
 
-# 残留数据库目录
-nonexist/
+# Scrapy stuff:
+.scrapy
 
-# 系统文件
-.DS_Store
-Thumbs.db
-desktop.ini
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Temporary or test directories
+temp/
+tmp/

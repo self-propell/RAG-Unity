@@ -14,11 +14,17 @@ from llm.providers import create_provider, provider_for_model
 from rag.indexer import build_index, update_index
 from rag.retriever import Retriever
 
+# Import approval system
+from ui.dashboard_approval import add_approval_routes
+
 app = Flask(__name__)
 _agents: dict[str, UnityAgent] = {}
 _index_running = False
 _drafts: dict[str, list[dict]] = {}
 _tasks: dict[str, list[dict]] = {}
+
+# Add approval routes
+add_approval_routes(app)
 
 DASHBOARD_HTML = """
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -54,6 +60,7 @@ button,input,select{font:inherit}.app{display:grid;grid-template-columns:260px 1
 <div class="sidebox"><div class="muted">Suggested Files</div><div id="suggestedFiles" class="col tiny"><div class="muted">暂无建议</div></div></div>
 <div class="sidebox"><div class="row"><div class="muted">Draft Queue</div><button class="btn tiny" onclick="applyAllDrafts()">Apply All</button><button class="btn tiny" onclick="discardAllDrafts()">Discard All</button></div><div id="drafts" class="col tiny"><div class="muted">暂无 draft</div></div></div>
 <div class="sidebox"><div class="row"><div class="muted">Tasks</div><button class="btn tiny" onclick="addTask()">+ Task</button></div><div id="tasks" class="col tiny"><div class="muted">暂无任务</div></div></div>
+<div class="sidebox"><div class="row"><div class="muted">Approval</div><button class="btn tiny" onclick="showApprovalConfig()">⚙️ Config</button></div><div class="muted tiny">Mode: <span id="approvalMode">batch</span></div></div>
 </div></div>
 <div class="main">
 <div class="tabs"><div class="tab active" onclick="tab('chat',this)">对话</div><div class="tab" onclick="tab('search',this)">检索</div><div class="tab" onclick="tab('files',this)">文件</div><div class="tab" onclick="tab('stats',this)">统计</div><div class="tab" onclick="tab('log',this)">日志</div></div>
@@ -109,6 +116,91 @@ async function grepFiles(){if(!activeProject)return alert('请先选择工程');
 async function loadStats(){if(!activeProject)return; const d=await api(`/stats?project_id=${encodeURIComponent(activeProject)}`,null,'GET'); if(d.error)return; const domains=Object.entries(d.domain_distribution||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(k)}: ${v}`).join('<br>')||'暂无'; const types=Object.entries(d.type_distribution||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${esc(k)}: ${v}`).join('<br>')||'暂无'; statsR.innerHTML=`<div class="grid"><div class="stat"><div class="muted">Chunks</div><div class="value green">${d.total_chunks}</div></div><div class="stat"><div class="muted">文件数</div><div class="value blue">${d.file_count}</div></div><div class="stat"><div class="muted">集合</div><div>${esc(d.collection_name)}</div></div><div class="stat"><div class="muted">数据库</div><div class="muted">${esc(d.db_path)}</div></div></div><div class="card"><b>域分布</b><div class="mono">${domains}</div></div><div class="card"><b>Chunk 类型分布</b><div class="mono">${types}</div></div>`}
 async function refreshAll(){await loadProjects();await loadConvs();await loadStats();await loadDrafts();await loadTasks();renderSuggestedFiles()}
 refreshAll();
+
+// Approval system
+let approvalCheckInterval = null;
+let currentSessionId = 'default';
+
+function startApprovalPolling() {
+  if (approvalCheckInterval) return;
+  approvalCheckInterval = setInterval(async () => {
+    if (!activeProject) return;
+    try {
+      const response = await fetch(`/api/approval/pending?session_id=${currentSessionId}`);
+      const data = await response.json();
+      if (data.has_pending) showApprovalModal(data.tool_calls);
+    } catch (error) {
+      console.error('Approval check failed:', error);
+    }
+  }, 1000);
+}
+
+function showApprovalModal(toolCalls) {
+  let html = '<div class="modal show"><div class="modalbox" style="max-width: 600px;"><h3>🛡️ Tool Approval Required</h3><div class="col" style="margin: 20px 0; max-height: 300px; overflow-y: auto;">';
+  html += '<div class="muted" style="margin-bottom: 10px;">The following tools need approval:</div>';
+  toolCalls.forEach((tc, index) => {
+    const argsStr = JSON.stringify(tc.arguments || {}, null, 2);
+    html += `<div class="card" style="margin-bottom: 8px; border-left: 3px solid var(--accent);"><div style="font-weight: bold; color: var(--accent);">${index + 1}. ${tc.name}</div><pre class="mono" style="margin-top: 5px; font-size: 11px; max-height: 100px; overflow-y: auto; background: var(--bg); padding: 8px; border-radius: 4px;">${esc(argsStr)}</pre></div>`;
+  });
+  html += '</div><div class="row" style="gap: 10px; margin-top: 20px;"><button class="btn" onclick="respondApproval(\'reject\')" style="flex: 1;">❌ Reject</button><button class="btn primary" onclick="respondApproval(\'approve\')" style="flex: 1;">✅ Approve</button><button class="btn" onclick="respondApproval(\'yolo\')" style="flex: 1; background: #f59e0b; border-color: #d97706;">🚀 YOLO</button></div><div style="margin-top: 15px; padding: 10px; background: var(--bg3); border-radius: var(--r); font-size: 11px;"><strong>YOLO Mode:</strong> Approve once, auto-approve all future tools.</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function respondApproval(action) {
+  try {
+    const response = await fetch('/api/approval/respond', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({session_id: currentSessionId, action: action})
+    });
+    const data = await response.json();
+    if (data.success) {
+      document.querySelector('.modal.show')?.remove();
+      if (action === 'approve') log('Tools approved');
+      else if (action === 'yolo') log('YOLO mode activated');
+      else log('Tools rejected');
+    } else {
+      alert('Approval failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Approval failed:', error);
+    alert('Failed to respond: ' + error.message);
+  }
+}
+
+async function showApprovalConfig() {
+  if (!activeProject) return alert('Please select a project first');
+  try {
+    const response = await fetch(`/api/approval/config?project_id=${encodeURIComponent(activeProject)}`);
+    const data = await response.json();
+    if (data.error) return alert('Failed to load config: ' + data.error);
+    const config = data.approval_config;
+    const configStr = JSON.stringify(config, null, 2);
+    const newConfigStr = prompt('Edit approval configuration (JSON):', configStr);
+    if (newConfigStr && newConfigStr !== configStr) {
+      try {
+        const newConfig = JSON.parse(newConfigStr);
+        const saveResponse = await fetch('/api/approval/config', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({project_id: activeProject, approval_config: newConfig})
+        });
+        const saveData = await saveResponse.json();
+        if (saveData.success) log('Approval config updated');
+        else alert('Failed to save: ' + (saveData.error || 'Unknown error'));
+      } catch (error) {
+        alert('Invalid JSON: ' + error.message);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load config:', error);
+    alert('Failed to load config: ' + error.message);
+  }
+}
+
+window.addEventListener('load', () => startApprovalPolling());
+window.addEventListener('beforeunload', () => clearInterval(approvalCheckInterval));
+
 </script></body></html>
 """
 

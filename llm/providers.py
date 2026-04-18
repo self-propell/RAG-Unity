@@ -2,13 +2,13 @@
 llm/providers.py — LLM Provider 抽象层
 
 支持:
-  - Anthropic Claude（Prompt Caching + Tool Use）
-  - OpenAI GPT / Codex（Function Calling）
+  - Anthropic Claude（Prompt Caching + Tool Use + Streaming）
+  - OpenAI GPT / Codex（Function Calling + Streaming）
   - 运行时模型切换
 """
 import json
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, AsyncIterator
 
 from core import config
 
@@ -49,6 +49,17 @@ class LLMProvider(ABC):
         tools: list[dict] = None,
         max_tokens: int = 4096,
     ) -> ChatResult:
+        ...
+
+    @abstractmethod
+    async def chat_stream(
+        self,
+        system_prompt: str,
+        messages: list[dict],
+        tools: list[dict] = None,
+        max_tokens: int = 4096,
+    ) -> AsyncIterator[str]:
+        """Stream chat completion (yields tokens)"""
         ...
 
     @abstractmethod
@@ -108,6 +119,22 @@ class ClaudeProvider(LLMProvider):
 
         stop = "tool_use" if response.stop_reason == "tool_use" else "end"
         return ChatResult(text=text, tool_calls=tool_calls, stats=stats, stop_reason=stop)
+
+    async def chat_stream(self, system_prompt: str, messages: list[dict], tools: list[dict] = None, max_tokens: int = 4096) -> AsyncIterator[str]:
+        """Stream tokens from Claude"""
+        kwargs = {
+            "model": self._model,
+            "max_tokens": max_tokens,
+            "system": [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
+            "messages": messages,
+        }
+        if tools:
+            from core.tools import get_claude_tools
+            kwargs["tools"] = get_claude_tools()
+
+        async with self.client.messages.stream(**kwargs) as stream:
+            async for text in stream.text_stream:
+                yield text
 
     def format_tool_result(self, call_id: str, result: dict) -> dict:
         return {
@@ -174,6 +201,33 @@ class OpenAIProvider(LLMProvider):
 
         stop = "tool_use" if choice.finish_reason == "tool_calls" or tool_calls else "end"
         return ChatResult(text=text, tool_calls=tool_calls, stats=stats, stop_reason=stop)
+
+    async def chat_stream(self, system_prompt: str, messages: list[dict], tools: list[dict] = None, max_tokens: int = 4096) -> AsyncIterator[str]:
+        """Stream tokens from OpenAI"""
+        from openai import AsyncOpenAI
+
+        kwargs = {"api_key": config.OPENAI_API_KEY}
+        if config.OPENAI_BASE_URL:
+            kwargs["base_url"] = config.OPENAI_BASE_URL
+        async_client = AsyncOpenAI(**kwargs)
+
+        openai_messages = [{"role": "system", "content": system_prompt}]
+        openai_messages.extend(messages)
+
+        kwargs = {
+            "model": self._model,
+            "messages": openai_messages,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        if tools:
+            from core.tools import get_openai_tools
+            kwargs["tools"] = get_openai_tools()
+
+        stream = await async_client.chat.completions.create(**kwargs)
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
     def format_tool_result(self, call_id: str, result: dict) -> dict:
         return {
